@@ -92,6 +92,7 @@ const ROUTES = `https://routes.geo.${REGION}.amazonaws.com/v2/routes?key=${API_K
 const COLORS = {hospital:"#1d3557", clinic:"#118ab2", pharmacy:"#6a4c93"};
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+const nm = n => (n && n!=="(unnamed)") ? n : "an unnamed hospital (not named on OpenStreetMap)";
 const panelPad = () => Math.min(390, window.innerWidth*.5);
 
 const map = new maplibregl.Map({container:"map", style:STYLE, center:[78.45,10.95], zoom:6.5, attributionControl:{compact:true}});
@@ -175,7 +176,7 @@ async function routeFrom(from,label,fit=true){
   if(pin) pin.remove();
   pin = new maplibregl.Marker({color:"#0b5fff"}).setLngLat(from).addTo(map);
   const best=nearestHospital(from); if(!best){box.textContent="No hospital in the data.";return;}
-  const to=best.f.geometry.coordinates, name=esc(best.f.properties.name);
+  const to=best.f.geometry.coordinates, name=esc(nm(best.f.properties.name));
   try{
     const r=await fetch(ROUTES,{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({Origin:from,Destination:to,TravelMode:"Car",LegGeometryFormat:"Simple"})});
@@ -205,11 +206,11 @@ map.on("click",async e=>{
   if(cl){const z=await map.getSource("places").getClusterExpansionZoom(cl.properties.cluster_id); return map.easeTo({center:cl.geometry.coordinates,zoom:z});}
   const pt=q("points");
   if(pt){const p=pt.properties,c=pt.geometry.coordinates.slice();
-    return popup(c,`<div class="popup"><b>${esc(p.name)}</b><div style="text-transform:capitalize">${esc(p.type)}</div>
-      ${p.address?`<div>${esc(p.address)}</div>`:""}${p.phone?`<div>Phone: ${esc(p.phone)}</div>`:""}${p.beds?`<div>Beds: ${esc(p.beds)}</div>`:""}</div>`,p.name,c);}
+    return popup(c,`<div class="popup"><b>${esc(nm(p.name))}</b><div style="text-transform:capitalize">${esc(p.type)}</div>
+      ${p.address?`<div>${esc(p.address)}</div>`:""}${p.phone?`<div>Phone: ${esc(p.phone)}</div>`:""}${p.beds?`<div>Beds: ${esc(p.beds)}</div>`:""}</div>`,nm(p.name),c);}
   const fv=q("far");
   if(fv){const p=fv.properties,c=fv.geometry.coordinates.slice();
-    return popup(c,`<div class="popup"><b>${esc(p.name)}</b><div style="text-transform:capitalize">${esc(p.kind)}</div>
+    return popup(c,`<div class="popup"><b>${esc(nm(p.name))}</b><div style="text-transform:capitalize">${esc(p.kind)}</div>
       <div class="far">${Number(p.km).toFixed(1)} km to the nearest hospital (straight line)</div></div>`,p.name,c);}
   if(!q("deserts")) return;   // outside the inhabited area
   routeFrom([e.lngLat.lng,e.lngLat.lat],"your pin");
