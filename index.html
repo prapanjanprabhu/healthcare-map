@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Healthcare Deserts of Tamil Nadu</title>
+<meta name="description" content="Which villages in Tamil Nadu are far from a hospital? Click anywhere for the road route and drive time to care.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
+<style>
+  :root{--ink:#14213d;--muted:#5c677d;--line:#e6eaf1;--accent:#0b5fff;--hot:#b3121f}
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink)}
+  #map{position:absolute;inset:0}
+  #panel{position:absolute;top:14px;left:14px;width:352px;max-width:calc(100% - 28px);max-height:calc(100% - 28px);overflow:auto;
+    background:rgba(255,255,255,.97);border-radius:16px;box-shadow:0 10px 34px rgba(20,33,61,.25);z-index:2}
+  .sec{padding:15px 18px;border-bottom:1px solid var(--line)} .sec:last-child{border:0}
+  .eyebrow{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  h1{font-size:21px;line-height:1.15;margin:5px 0 0;letter-spacing:-.01em}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .stat{background:#fff5f4;border-radius:11px;padding:10px 12px}
+  .stat b{display:block;font-size:26px;line-height:1.05;color:var(--hot);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .stat span{font-size:11.5px;color:var(--muted);line-height:1.3;display:block;margin-top:3px}
+  .sub{font-size:12.5px;color:var(--muted);margin:11px 0 0;line-height:1.5}
+  input[type=text]{width:100%;padding:10px 12px;border:1px solid #ccd3df;border-radius:10px;font-size:14px;outline:none}
+  input[type=text]:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(11,95,255,.15)}
+  label.row{display:flex;align-items:center;gap:9px;font-size:13.5px;margin:7px 0;cursor:pointer}
+  label.row small{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums}
+  .dot{width:11px;height:11px;border-radius:50%;flex:none;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.18)}
+  .legend{height:10px;border-radius:5px;margin-top:8px;background:linear-gradient(90deg,#fff1d6,#fdbb84 33%,#ef6548 62%,#b30000 85%,#4a0000)}
+  .ticks{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:3px}
+  button{cursor:pointer;border:0;border-radius:10px;padding:10px 12px;background:var(--accent);color:#fff;font-size:13px;font-weight:600}
+  button:hover{filter:brightness(1.08)}
+  button.ghost{background:#eef3ff;color:var(--accent)} button.full{width:100%}
+  #result{display:none;background:#f4f7ff;border-radius:11px;padding:12px;font-size:13px;line-height:1.45;margin-top:10px}
+  #result .n{font-size:23px;font-weight:700;color:var(--ink)}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px}
+  .maplibregl-popup-content{border-radius:11px;padding:12px 14px;font-family:inherit;box-shadow:0 6px 22px rgba(0,0,0,.2)}
+  .popup b{font-size:14px} .popup div{font-size:12.5px;margin:3px 0;color:#333}
+  .popup .far{color:var(--hot);font-weight:700}
+  #toggle{display:none}
+  .foot{font-size:11px;color:var(--muted);line-height:1.45}
+  @media(max-width:600px){#panel{width:calc(100% - 28px)} #toggle{display:block;margin:10px 18px} .collapsible.closed{display:none}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <div class="sec">
+    <div class="eyebrow">Tamil Nadu · OpenStreetMap + Amazon Location</div>
+    <h1>Healthcare Deserts</h1>
+    <div class="stats">
+      <div class="stat"><b id="s-far">–</b><span>towns &amp; villages more than 10 km from a hospital</span></div>
+      <div class="stat"><b id="s-worst">–</b><span id="s-worst-l">farthest from care</span></div>
+    </div>
+    <p class="sub">Darker red = further from a hospital (inhabited land only). Dots are the villages that are 10+ km away. <b>Click anywhere</b> for the road route and drive time to care.</p>
+  </div>
+  <button id="toggle" class="ghost">Show / hide controls</button>
+  <div class="collapsible">
+    <div class="sec">
+      <input id="search" type="text" placeholder="Search a town or address, press Enter" aria-label="Search a place">
+      <div class="hint">Drops a pin and measures the trip to the nearest hospital.</div>
+    </div>
+    <div class="sec">
+      <label class="row"><input type="checkbox" id="desertToggle" checked><span class="dot" style="background:#ef6548"></span>Distance-to-hospital surface</label>
+      <label class="row"><input type="checkbox" id="farToggle" checked><span class="dot" style="background:#7a0019"></span>Villages 10+ km from a hospital<small id="c-far"></small></label>
+      <div class="eyebrow" style="margin:12px 0 2px">Facilities (appear as you zoom in)</div>
+      <label class="row"><input type="checkbox" data-type="hospital" checked><span class="dot" style="background:#1d3557"></span>Hospitals<small id="c-hospital"></small></label>
+      <label class="row"><input type="checkbox" data-type="clinic" checked><span class="dot" style="background:#118ab2"></span>Clinics<small id="c-clinic"></small></label>
+      <label class="row"><input type="checkbox" data-type="pharmacy" checked><span class="dot" style="background:#6a4c93"></span>Pharmacies<small id="c-pharmacy"></small></label>
+      <div class="eyebrow" style="margin-top:12px">Distance to nearest hospital</div>
+      <div class="legend"></div>
+      <div class="ticks"><span>2 km</span><span>5</span><span>10</span><span>15</span><span>25+ km</span></div>
+    </div>
+    <div class="sec">
+      <button id="worst" class="full">Fly to the most remote village</button>
+      <div id="result"></div>
+    </div>
+    <div class="sec foot">Data: © OpenStreetMap contributors (ODbL). Map, search and routing: Amazon Location Service. The surface uses straight-line distance and only covers land near a mapped settlement; routes are by road. Distance says nothing about quality or capacity of care.</div>
+  </div>
+</div>
+
+<script>
+// Amazon Location API key (restricted to this site's URL in the AWS console)
+const API_KEY = "v1.public.eyJqdGkiOiJjYTE5ODc5Yy1iN2UzLTQwODEtOGM4OS1mZDRjMjBhMmUwYTMifXarLP3Mh8yUgSCbneZjkYDlDfFHk8FFakSqWk9xkNH8PkeheoKn-oMV4WcIs0kXESL8uSkYlCzcYKwlVopgOg74aoyNTA71DkQK2ub9CQWWfpt5hENNNDWuXDOkGpMC2eBCk7qxMHBuEzBFr2VkG3-p0fFiunpHkF92ZILoG8VO4UjeLkTvTfezCZLVSXgzdhzr9-qXo_Sf5ID-vU0EZcLZew9Bp70FRChDkZe2yXQO0sqFhmX8LdSK5VxLOyUHKq3k3YygYDqMEddtKUbdp3UG_3pafflYmp-njR4KjpHYrxKCy0cFqWZaU-Fe-07w9nGpxEE37lK-bOM4WUDavx4.Njg1MGZlZTUtYTI2ZS00MDdlLWJjNDktMDNmZDlkNzVmMjQ0";
+const REGION  = "ap-south-1";
+
+const STYLE  = `https://maps.geo.${REGION}.amazonaws.com/v2/styles/Standard/descriptor?key=${API_KEY}`;
+const PLACES = `https://places.geo.${REGION}.amazonaws.com/v2/geocode?key=${API_KEY}`;
+const ROUTES = `https://routes.geo.${REGION}.amazonaws.com/v2/routes?key=${API_KEY}`;
+const COLORS = {hospital:"#1d3557", clinic:"#118ab2", pharmacy:"#6a4c93"};
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+const panelPad = () => Math.min(390, window.innerWidth*.5);
+
+const map = new maplibregl.Map({container:"map", style:STYLE, center:[78.45,10.95], zoom:6.5, attributionControl:{compact:true}});
+map.addControl(new maplibregl.NavigationControl(), "bottom-right");
+map.addControl(new maplibregl.GeolocateControl({trackUserLocation:false}), "bottom-right");
+
+let all = [], hospitals = [], stats = null, pin = null;
+
+map.on("style.load", async () => {
+  const [data, deserts, boundary, setts, st] = await Promise.all(
+    ["data.geojson","deserts.geojson","boundary.geojson","settlements.geojson","stats.json"].map(u=>fetch(u).then(r=>r.json())));
+  stats = st; all = data.features; hospitals = all.filter(f=>f.properties.type==="hospital");
+  const far = setts.features.filter(f=>f.properties.km>10);
+
+  $("s-far").textContent = st.far_settlements.toLocaleString();
+  $("s-worst").textContent = st.worst.km.toFixed(0)+" km";
+  $("s-worst-l").textContent = `to a hospital from ${st.worst.name}, the most remote village`;
+  $("c-far").textContent = st.far_settlements.toLocaleString();
+  ["hospital","clinic","pharmacy"].forEach(t=>$("c-"+t).textContent=all.filter(f=>f.properties.type===t).length.toLocaleString());
+
+  // smooth distance surface: continuous colour ramp, soft edges, fades out as you zoom into streets
+  map.addSource("deserts",{type:"geojson",data:deserts});
+  map.addLayer({id:"deserts",type:"fill",source:"deserts",paint:{
+    "fill-antialias":false,
+    "fill-color":["interpolate",["linear"],["get","km"],0,"#fff1d6",2,"#ffe3b8",5,"#fdbb84",10,"#ef6548",15,"#b30000",25,"#4a0000"],
+    "fill-opacity":["interpolate",["linear"],["get","km"],0,0,2,.28,5,.5,10,.72,20,.85]}},
+    map.getStyle().layers.find(l=>l.type==="symbol")?.id);
+
+  map.addSource("boundary",{type:"geojson",data:boundary});
+  map.addLayer({id:"boundary",type:"line",source:"boundary",paint:{"line-color":"#14213d","line-width":1.6,"line-opacity":.75}});
+
+  // the villages that are 10+ km from a hospital: small dots, visible at every zoom
+  map.addSource("far",{type:"geojson",data:{type:"FeatureCollection",features:far}});
+  map.addLayer({id:"far",type:"circle",source:"far",paint:{
+    "circle-color":"#7a0019","circle-stroke-color":"#fff","circle-stroke-width":.8,
+    "circle-radius":["interpolate",["linear"],["zoom"],6,1.8,9,3.5,12,6],
+    "circle-opacity":.9}});
+
+  // facilities: small dots, only once zoomed in enough to be readable
+  map.addSource("places",{type:"geojson",data,cluster:true,clusterRadius:36,clusterMaxZoom:10});
+  map.addLayer({id:"clusters",type:"circle",source:"places",minzoom:8,filter:["has","point_count"],
+    paint:{"circle-color":"#1d3557","circle-opacity":.75,"circle-radius":["step",["get","point_count"],9,30,12,150,15],
+           "circle-stroke-width":1.5,"circle-stroke-color":"#fff"}});
+  map.addLayer({id:"cluster-count",type:"symbol",source:"places",minzoom:8,filter:["has","point_count"],
+    layout:{"text-field":["get","point_count_abbreviated"],"text-size":10},paint:{"text-color":"#fff"}});
+  map.addLayer({id:"points",type:"circle",source:"places",minzoom:8,filter:["!",["has","point_count"]],
+    paint:{"circle-color":["match",["get","type"],"hospital",COLORS.hospital,"clinic",COLORS.clinic,"pharmacy",COLORS.pharmacy,"#555"],
+           "circle-radius":["interpolate",["linear"],["zoom"],8,2.5,12,4.5,15,7],"circle-stroke-width":1.2,"circle-stroke-color":"#fff"}});
+
+  map.addSource("route",{type:"geojson",data:{type:"FeatureCollection",features:[]}});
+  map.addLayer({id:"route-case",type:"line",source:"route",layout:{"line-cap":"round","line-join":"round"},paint:{"line-color":"#fff","line-width":9}});
+  map.addLayer({id:"route-line",type:"line",source:"route",layout:{"line-cap":"round","line-join":"round"},paint:{"line-color":"#0b5fff","line-width":5}});
+  applyFilter();
+});
+
+// ---- toggles ----
+function applyFilter(){
+  const on = [...document.querySelectorAll("input[data-type]")].filter(c=>c.checked).map(c=>c.dataset.type);
+  map.getSource("places").setData({type:"FeatureCollection",features:all.filter(f=>on.includes(f.properties.type))});
+}
+document.querySelectorAll("input[data-type]").forEach(c=>c.addEventListener("change",applyFilter));
+const vis = (layer,on)=>map.setLayoutProperty(layer,"visibility",on?"visible":"none");
+$("desertToggle").addEventListener("change",e=>vis("deserts",e.target.checked));
+$("farToggle").addEventListener("change",e=>vis("far",e.target.checked));
+$("toggle").addEventListener("click",()=>document.querySelector(".collapsible").classList.toggle("closed"));
+
+// ---- nearest hospital ----
+function km(a,b){const R=6371,r=x=>x*Math.PI/180,dLat=r(b[1]-a[1]),dLon=r(b[0]-a[0]);
+  const h=Math.sin(dLat/2)**2+Math.cos(r(a[1]))*Math.cos(r(b[1]))*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+function nearestHospital(from){
+  let best=null,bd=1e9;
+  for(const f of hospitals){const d=km(from,f.geometry.coordinates); if(d<bd&&d>0.05){bd=d;best=f;}}
+  return best&&{f:best,d:bd};
+}
+
+// ---- road route to the nearest hospital (Amazon Location Routes) ----
+async function routeFrom(from,label,fit=true){
+  const box=$("result"); box.style.display="block"; box.textContent="Finding the nearest hospital…";
+  if(pin) pin.remove();
+  pin = new maplibregl.Marker({color:"#0b5fff"}).setLngLat(from).addTo(map);
+  const best=nearestHospital(from); if(!best){box.textContent="No hospital in the data.";return;}
+  const to=best.f.geometry.coordinates, name=esc(best.f.properties.name);
+  try{
+    const r=await fetch(ROUTES,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({Origin:from,Destination:to,TravelMode:"Car",LegGeometryFormat:"Simple"})});
+    if(!r.ok) throw new Error(await r.text());
+    const route=(await r.json()).Routes[0];
+    const line=route.Legs.flatMap(l=>l.Geometry.LineString);
+    map.getSource("route").setData({type:"Feature",geometry:{type:"LineString",coordinates:line}});
+    const sum=k=>route.Legs.reduce((t,l)=>t+(l.VehicleLegDetails?.Summary?.Overview?.[k]||0),0);
+    const dist=route.Summary?.Distance??sum("Distance"), dur=route.Summary?.Duration??sum("Duration");
+    box.innerHTML=`<div class="n">${Math.round(dur/60)} min · ${(dist/1000).toFixed(1)} km</div>by road from <b>${esc(label)}</b> to <b>${name}</b>`;
+    if(fit){const b=new maplibregl.LngLatBounds(); line.forEach(c=>b.extend(c)); map.fitBounds(b,{padding:{top:90,bottom:90,left:panelPad(),right:60},maxZoom:13});}
+  }catch(err){
+    console.error(err);
+    map.getSource("route").setData({type:"FeatureCollection",features:[]});
+    box.innerHTML=`<div class="n">${best.d.toFixed(1)} km</div>straight line to <b>${name}</b> (road routing unavailable)`;
+  }
+}
+
+// ---- clicks ----
+function popup(lngLat,html,routeLabel,coords){
+  new maplibregl.Popup({offset:10}).setLngLat(lngLat).setHTML(html+`<div style="margin-top:8px"><button class="routeBtn">Route to nearest hospital</button></div>`).addTo(map);
+  setTimeout(()=>{const b=document.querySelector(".maplibregl-popup .routeBtn"); if(b) b.onclick=()=>routeFrom(coords,routeLabel);},0);
+}
+map.on("click",async e=>{
+  const q=l=>map.queryRenderedFeatures(e.point,{layers:[l]})[0];
+  const cl=q("clusters");
+  if(cl){const z=await map.getSource("places").getClusterExpansionZoom(cl.properties.cluster_id); return map.easeTo({center:cl.geometry.coordinates,zoom:z});}
+  const pt=q("points");
+  if(pt){const p=pt.properties,c=pt.geometry.coordinates.slice();
+    return popup(c,`<div class="popup"><b>${esc(p.name)}</b><div style="text-transform:capitalize">${esc(p.type)}</div>
+      ${p.address?`<div>${esc(p.address)}</div>`:""}${p.phone?`<div>Phone: ${esc(p.phone)}</div>`:""}${p.beds?`<div>Beds: ${esc(p.beds)}</div>`:""}</div>`,p.name,c);}
+  const fv=q("far");
+  if(fv){const p=fv.properties,c=fv.geometry.coordinates.slice();
+    return popup(c,`<div class="popup"><b>${esc(p.name)}</b><div style="text-transform:capitalize">${esc(p.kind)}</div>
+      <div class="far">${Number(p.km).toFixed(1)} km to the nearest hospital (straight line)</div></div>`,p.name,c);}
+  if(!q("deserts")) return;   // outside the inhabited area
+  routeFrom([e.lngLat.lng,e.lngLat.lat],"your pin");
+});
+["clusters","points","far"].forEach(l=>{
+  map.on("mouseenter",l,()=>map.getCanvas().style.cursor="pointer");
+  map.on("mouseleave",l,()=>map.getCanvas().style.cursor="");
+});
+
+$("worst").addEventListener("click",()=>{
+  if(!stats) return;
+  const w=stats.worst;
+  map.flyTo({center:w.coordinates,zoom:9.5,padding:{left:panelPad()}});
+  routeFrom(w.coordinates,`${w.name} (${w.km} km from any hospital)`,false);
+});
+
+// ---- geocode search (Amazon Location Places) ----
+$("search").addEventListener("keydown",async e=>{
+  if(e.key!=="Enter") return;
+  const q=e.target.value.trim(); if(!q) return;
+  try{
+    const r=await fetch(PLACES,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({QueryText:q,MaxResults:1,BiasPosition:[78.45,10.95],Filter:{IncludeCountries:["IND"]}})});
+    const item=(await r.json()).ResultItems?.[0];
+    if(item){ map.flyTo({center:item.Position,zoom:11,padding:{left:panelPad()}}); routeFrom(item.Position,item.Title,false); }
+    else alert("Nothing found for: "+q);
+  }catch(err){console.error(err);alert("Search failed. Check the API key permissions.");}
+});
+</script>
+</body>
+</html>
