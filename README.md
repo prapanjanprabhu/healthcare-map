@@ -40,3 +40,6 @@ Standard-library Python only. Swap `AREA` and the map centre and it works for an
 ## Run locally
 1. Put your Amazon Location API key and region in `index.html`.
 2. `python -m http.server 8000` and open http://localhost:8000
+
+## License
+Code: MIT (see `LICENSE`). Data: © OpenStreetMap contributors, ODbL.
